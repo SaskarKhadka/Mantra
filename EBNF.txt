@@ -1,0 +1,52 @@
+EBNF:
+
+<stmt> -> (<varDecl> | <assignment> | <ifStmt> | <whileStmt> | <forStmt>);
+
+<varDecl> -> var idetifier = <boolean1>;
+
+<assignment> -> idetifier = <boolean1>;
+
+<ifStmt> -> if openParanthesis <boolean1> closeParanthesis
+            <block>
+        | 
+        if openParanthesis <boolean1> closeParanthesis
+            <block>
+        {
+        elseif openParanthesis <boolean1> closeParanthesis
+            <block>
+        }
+        else 
+            <block>
+
+<whileStmt> -> while openParanthesis <boolean1> closeParanthesis
+            <block>
+
+<forStmt> -> for openParanthesis (<varDecl> | <assignment> | idetifier); <boolean1>; <assignment> closeParanthesis
+            <block>
+
+<block> -> <blockStart>
+            {<stmt>}
+           <blockEnd>
+
+<boolean1> -> <boolean2> {or <boolean2>};
+
+<boolean2> -> <relational1> {and <relational1>};
+
+<relational1> -> <relational2> {(== | !=) <relational2>};
+
+<relational2> -> <arithmetic1> {(> | >= | < | <=) <arithmetic1>};
+
+<arithmetic1> → <arithmetic2> {(+ | -) <arithmetic2>};
+
+<arithmetic2> → <factor> {(* | / | %) <factor>};
+
+
+<factor> -> openParanthesis <boolean1> closeParanthesis | {+|-|!}idetifier | {+|-|!}number | string | True | False
+
+<blockStart> -> {
+
+<blockEnd> -> }
+
+<openParanthesis> -> (
+
+<closeParanthesis> -> )

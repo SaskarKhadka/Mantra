@@ -74,11 +74,10 @@ class Scanner {
     if (isalpha()) {
       // If the character is a letter, determine the identifier or keyword
       Error? error = determineIdentifierOrKeyword();
-      var keywordIndex = keywords.indexOf(_lexeme.toUpperCase());
-
+      var keyword = keywords[_lexeme];
+      // if (keyword == null) keyword = keywords[_lexeme];
       _tokens.add({
-        "token":
-            keywordIndex == -1 ? TokenType.IDENTIFIER : keywords[keywordIndex],
+        "token": keyword == null ? TokenType.IDENTIFIER : keyword,
         "lexeme": _lexeme,
       });
       return error;
@@ -92,7 +91,10 @@ class Scanner {
       Error? error = determineString();
       _tokens.add({"token": TokenType.STRING, "lexeme": _lexeme});
       return error;
-    } else if (_nextChar == " " || _nextChar == "\t" || _nextChar == "\n") {
+    } else if (_nextChar == " " ||
+        _nextChar == "\t" ||
+        _nextChar == "\n" ||
+        _nextChar == "\r") {
       if (_nextChar == "\n") {
         _line += 1;
         _col = 0;
@@ -100,43 +102,49 @@ class Scanner {
       getChar();
     } else if (_nextChar == "=") {
       updateLexeme();
+      var initialLexeme = _lexeme;
       getChar();
       updateLexeme();
       // If the character is =, determine if it is ASSIGNMENT or EQUALITY operator
-      if (_nextChar == "=")
+      if (_nextChar == "=") {
         _tokens.add({"token": TokenType.EQUALEQUAL, "lexeme": _lexeme});
-      else
-        _tokens.add({"token": TokenType.EQUAL, "lexeme": _lexeme});
-      getChar();
+        getChar();
+      } else
+        _tokens.add({"token": TokenType.EQUAL, "lexeme": initialLexeme});
     } else if (_nextChar == "!") {
       updateLexeme();
+      var initialLexeme = _lexeme;
       getChar();
       updateLexeme();
       // If the character is !, determine if it is NOT or NOT EQUAL operator
-      if (_nextChar == "=")
+      if (_nextChar == "=") {
         _tokens.add({"token": TokenType.NOTEQUAL, "lexeme": _lexeme});
-      else
-        _tokens.add({"token": TokenType.NOT, "lexeme": _lexeme});
-      getChar();
+        getChar();
+      } else
+        _tokens.add({"token": TokenType.NOT, "lexeme": initialLexeme});
     } else if (_nextChar == ">") {
       updateLexeme();
+      var initialLexeme = _lexeme;
       getChar();
       updateLexeme();
       // If the character is >, determine if it is GREATER THAN or GREATER THAN OR EQUAL operator
-      if (_nextChar == "=")
+      if (_nextChar == "=") {
         _tokens.add({"token": TokenType.GTEQUAL, "lexeme": _lexeme});
-      else
-        _tokens.add({"token": TokenType.GREATER, "lexeme": _lexeme});
+        getChar();
+      } else
+        _tokens.add({"token": TokenType.GREATER, "lexeme": initialLexeme});
       getChar();
     } else if (_nextChar == "<") {
       updateLexeme();
+      var initialLexeme = _lexeme;
       getChar();
       updateLexeme();
       // If the character is <, determine if it is LESS THAN or LESS THAN OR EQUAL operator
-      if (_nextChar == "=")
+      if (_nextChar == "=") {
         _tokens.add({"token": TokenType.LESSEQUAL, "lexeme": _lexeme});
-      else
-        _tokens.add({"token": TokenType.LESS, "lexeme": _lexeme});
+        getChar();
+      } else
+        _tokens.add({"token": TokenType.LESS, "lexeme": initialLexeme});
       getChar();
     }
     // Similarly, tokenize all the operators
@@ -171,6 +179,10 @@ class Scanner {
     } else if (_nextChar == "/") {
       updateLexeme();
       _tokens.add({"token": TokenType.DIV, "lexeme": _lexeme});
+      getChar();
+    } else if (_nextChar == "%") {
+      updateLexeme();
+      _tokens.add({"token": TokenType.MODULUS, "lexeme": _lexeme});
       getChar();
     } else if (_nextChar == ";") {
       updateLexeme();
