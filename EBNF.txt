@@ -1,6 +1,21 @@
 EBNF:
 
-<stmt> -> (<varDecl> | <assignment> | <ifStmt> | <whileStmt> | <forStmt> | <printStmt>);
+<stmt> -> (<varDecl> | <assignment> | <break> | <continue> | <ifStmt> | <whileStmt> | <forStmt> | <printStmt> | <functionDeclaration> | <functionCall>) | <return>;
+
+<functionDeclaration> -> func identifier openParanthesis <arguments/parameters> closeParanthesis blockStart
+                            {<stmt>}
+                            <return>
+                        blockEnd
+
+<break> -> break;
+
+<continue> -> continue;
+
+<return> -> return <boolean1>;
+
+<functionCall> -> indentifier openParanthesis <arguments/parameters> closeParanthesis
+
+<arguments/parameters> -> epsilon | [identifier {,identifier}]
 
 <printStmt> -> print openParanthesis (<boolean1>) closeParanthesis
 
@@ -42,8 +57,7 @@ EBNF:
 
 <arithmetic2> → <factor> {(* | / | %) <factor>};
 
-
-<factor> -> openParanthesis <boolean1> closeParanthesis | {+|-|!}idetifier | {+|-|!}number | string | True | False
+<factor> -> openParanthesis <boolean1> closeParanthesis | {+|-|!}idetifier | {+|-|!}number | string | True | False | null
 
 <blockStart> -> {
 

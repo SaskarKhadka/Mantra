@@ -34,6 +34,8 @@ enum TokenType {
   False,
   OR,
   AND,
+  BREAK,
+  CONTINUE,
 
   // LITERALS
   STRING,
@@ -57,6 +59,8 @@ final Map<String, dynamic> keywords = {
   "False": TokenType.False,
   "or": TokenType.OR,
   "and": TokenType.AND,
+  "break": TokenType.BREAK,
+  "continue": TokenType.CONTINUE,
 };
 
 enum TreeNodeTypes {
@@ -79,6 +83,8 @@ enum TreeNodeTypes {
   ForStatement,
   WhileStatement,
   PrintStatement,
+  BreakStatement,
+  ContinueStatement
 }
 
 enum RunTimeTypes {

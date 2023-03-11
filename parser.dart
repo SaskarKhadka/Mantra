@@ -13,6 +13,7 @@ class Parser {
   List<Map<String, dynamic>> _body = [];
   int? _nextLine;
   int _currIndex = -1;
+  late TokenType _nextStatement;
 
   Parser(this._tokens) {
     /*
@@ -73,6 +74,7 @@ class Parser {
      */
     _getToken();
     while (_nextToken != TokenType.EOF) {
+      _nextStatement = _nextToken!;
       Map<String, dynamic> result = _stmt();
       _body.add(result);
       if (_nextToken != TokenType.EOF) _getToken();
@@ -85,34 +87,65 @@ class Parser {
     Cerates AST for different types of statements
     Returns a node for the said statement
      */
-    var result;
     if (_nextToken == TokenType.IDENTIFIER) {
       // Assignment type
-      result = _assignment();
-      return _checkSemiColon(result);
+      return _checkSemiColon(_assignment());
     } else if (_nextToken == TokenType.VAR) {
       // Variable decleration type
-      result = _varDecl();
-      return _checkSemiColon(result);
+      return _checkSemiColon(_varDecl());
     } else if (_nextToken == TokenType.IF) {
       // If statement
       _getToken();
-      result = _ifStmt();
-      return result;
+      return _ifStmt();
     } else if (_nextToken == TokenType.WHILE) {
       // While statement
       _getToken();
-      result = _whileStmt();
-      return result;
+      return _whileStmt();
     } else if (_nextToken == TokenType.FOR) {
       // For statement
       _getToken();
-      result = _forStmt();
-      return result;
+      return _forStmt();
     } else if (_nextToken == TokenType.PRINT) {
       _getToken();
-      result = _printStmt();
-      return _checkSemiColon(result);
+      return _checkSemiColon(_printStmt());
+    } else if (_nextToken == TokenType.BREAK) {
+      return _checkSemiColon(_breakStmt());
+    } else if (_nextToken == TokenType.CONTINUE) {
+      return _checkSemiColon(_continueStatement());
+    }
+  }
+
+  _breakStmt() {
+    /*
+    Parses break statement
+     */
+    if (_nextStatement == TokenType.FOR || _nextStatement == TokenType.WHILE) {
+      _getToken();
+      return {
+        "type": TreeNodeTypes.BreakStatement,
+        "line": _nextLine,
+      };
+    } else {
+      int errorLine = _nextLine!;
+      throw SyntaxError(
+          "A break statement can't be used outside of a loop", errorLine);
+    }
+  }
+
+  _continueStatement() {
+    /*
+    Parses continue statement
+     */
+    if (_nextStatement == TokenType.FOR || _nextStatement == TokenType.WHILE) {
+      _getToken();
+      return {
+        "type": TreeNodeTypes.ContinueStatement,
+        "line": _nextLine,
+      };
+    } else {
+      int errorLine = _nextLine!;
+      throw SyntaxError(
+          "A continue statement can't be used outside of a loop", errorLine);
     }
   }
 
