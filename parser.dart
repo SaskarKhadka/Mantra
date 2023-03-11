@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'error.dart';
 import 'token.dart';
 
 class Parser {
@@ -10,7 +10,8 @@ class Parser {
   TokenType? _nextToken;
   String? _nextLexeme;
   late Map<String, dynamic> _parseTree;
-  List<Map<String, dynamic>> body = [];
+  List<Map<String, dynamic>> _body = [];
+  int? _nextLine;
   int _currIndex = -1;
 
   Parser(this._tokens) {
@@ -27,7 +28,7 @@ class Parser {
    */
   Map<String, dynamic> get parseTree => _parseTree;
 
-  getToken() {
+  _getToken() {
     /*
     Gets the next token and next lexeme in the input code
     puts it in _nextToken and _nextLexeme
@@ -36,9 +37,33 @@ class Parser {
     if (_currIndex < _tokens.length) {
       _nextToken = _tokens[_currIndex]["token"];
       _nextLexeme = _tokens[_currIndex]["lexeme"];
+      _nextLine = _tokens[_currIndex]["line"];
     } else {
       _nextLexeme = null;
       _nextToken = null;
+      _nextLine = null;
+    }
+  }
+
+  _peekNext() {
+    /*
+    Returns the next token to be used without updating _nextToken  
+    */
+    if (_currIndex + 1 < _tokens.length) {
+      return _tokens[_currIndex + 1]["token"];
+    } else {
+      return null;
+    }
+  }
+
+  _prevLineNumber() {
+    /*
+    Returns the line number of previous token
+     */
+    if (_currIndex != 0) {
+      return _tokens[_currIndex - 1]["line"];
+    } else {
+      return -1;
     }
   }
 
@@ -46,16 +71,16 @@ class Parser {
     /*
      Creates the abstract synatx tree of the tokens
      */
-    getToken();
+    _getToken();
     while (_nextToken != TokenType.EOF) {
-      Map<String, dynamic> result = stmt();
-      body.add(result);
-      if (_nextToken != TokenType.EOF) getToken();
+      Map<String, dynamic> result = _stmt();
+      _body.add(result);
+      if (_nextToken != TokenType.EOF) _getToken();
     }
-    _parseTree["body"] = body;
+    _parseTree["body"] = _body;
   }
 
-  stmt() {
+  _stmt() {
     /*
     Cerates AST for different types of statements
     Returns a node for the said statement
@@ -63,471 +88,619 @@ class Parser {
     var result;
     if (_nextToken == TokenType.IDENTIFIER) {
       // Assignment type
-      result = assignment();
-      return checkSemiColon(result);
+      result = _assignment();
+      return _checkSemiColon(result);
     } else if (_nextToken == TokenType.VAR) {
       // Variable decleration type
-      result = varDecl();
-      return checkSemiColon(result);
+      result = _varDecl();
+      return _checkSemiColon(result);
     } else if (_nextToken == TokenType.IF) {
       // If statement
-      getToken();
-      result = ifStmt();
+      _getToken();
+      result = _ifStmt();
       return result;
     } else if (_nextToken == TokenType.WHILE) {
       // While statement
-      getToken();
-      result = whileStmt();
+      _getToken();
+      result = _whileStmt();
       return result;
     } else if (_nextToken == TokenType.FOR) {
       // For statement
-      getToken();
-      result = forStmt();
+      _getToken();
+      result = _forStmt();
       return result;
+    } else if (_nextToken == TokenType.PRINT) {
+      _getToken();
+      result = _printStmt();
+      return _checkSemiColon(result);
     }
   }
 
-  forStmtInit() {
+  _printStmt() {
+    /*
+    Parses the print statement
+     */
+    if (_nextToken == TokenType.LPAREN) {
+      Map<String, dynamic> printTree = {
+        "type": TreeNodeTypes.PrintStatement,
+        "line": _nextLine,
+      };
+
+      printTree["value"] = _boolean1();
+      return printTree;
+    }
+  }
+
+  _forStmtInit() {
     /*
     Parses the initialization statement of a for loop
      */
     switch (_nextToken) {
       case TokenType.VAR:
-        return checkSemiColon(varDecl());
+        return _checkSemiColon(_varDecl());
       case TokenType.IDENTIFIER:
-        return checkSemiColon(assignment());
+        if (_peekNext() == TokenType.SEMI_COLON) {
+          return _checkSemiColon(_factor());
+        } else if (_peekNext() == TokenType.EQUAL) {
+          return _checkSemiColon(_assignment());
+        } else {
+          int errorLine =
+              _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+          throw SyntaxError(
+              "Invalid initialization statement in for loop", errorLine);
+        }
       default:
-        print("Invalid initialization condition in for loop");
-        exit(0);
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError(
+            "Invalid initialization statement in for loop", errorLine);
     }
   }
 
-  forStmtTest() {
+  _forStmtTest() {
     /*
     Parses the test statement of a for loop
      */
-    return checkSemiColon(boolean1());
+    var res = _boolean1();
+    if (_nextToken != TokenType.SEMI_COLON) {
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError("Invalid test condition in for loop", errorLine);
+    } else
+      return res;
   }
 
-  forStmtUpdate() {
+  _forStmtUpdate() {
     /*
     Parses the update statement of a for loop
      */
     if (_nextToken == TokenType.IDENTIFIER) {
-      var result = assignment();
-      print(result);
-      return result;
-    } else {
-      print("invalid update value in for loop");
-      exit(0);
+      if (_peekNext() == TokenType.EQUAL) {
+        return _assignment();
+      }
     }
+    int errorLine =
+        _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+    throw SyntaxError("Invalid update statement in for loop", errorLine);
   }
 
-  forStmt() {
+  _forStmt() {
     /*
     Creates the AST for for statements
     Returns a node for the for statement
      */
     if (_nextToken == TokenType.LPAREN) {
-      Map<String, dynamic> forTree = {"type": "ForStatement"};
-      getToken();
-      forTree["init"] = forStmtInit();
+      Map<String, dynamic> forTree = {
+        "type": TreeNodeTypes.ForStatement,
+        "line": _nextLine,
+      };
+      // forTree["scope"] = _symbolTable.allocate();
+      _getToken();
+      forTree["init"] = _forStmtInit();
 
-      getToken();
-      forTree["test"] = forStmtTest();
+      _getToken();
+      forTree["test"] = _forStmtTest();
 
-      getToken();
-      forTree["update"] = forStmtUpdate();
+      _getToken();
+      forTree["update"] = _forStmtUpdate();
 
       if (_nextToken != TokenType.RPAREN) {
-        print("Closing paranthesis in for loop not found");
-        exit(0);
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError(
+            "Closing paranthesis in for loop not found", errorLine);
       }
 
-      getToken();
+      _getToken();
       if (_nextToken == TokenType.LCURL) {
         // Parse the block statements
-        getToken();
+        _getToken();
         forTree["body"] = {
-          "type": "BlockStatement",
-          "body": blockStatements(),
+          "type": TreeNodeTypes.BlockStatement,
+          "body": _blockStatements(),
+          "line": _nextLine,
         };
         return forTree;
       } else {
-        print("Enclose block statements inside blocks {}");
-        exit(0);
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError(
+            "Enclose block statements inside blocks curly braces", errorLine);
       }
     } else {
-      print("Please insert the for loop parameters inside paranthesis");
-      exit(0);
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError(
+          "Insert the for loop parameters inside paranthesis", errorLine);
     }
   }
 
-  whileStmt() {
+  _whileStmt() {
     /*
     Creates the AST for while statements
     Returns a node for the while statement
      */
     if (_nextToken == TokenType.LPAREN) {
-      Map<String, dynamic> ifTree = {"type": "WhileStatement"};
+      Map<String, dynamic> whileTree = {
+        "type": TreeNodeTypes.WhileStatement,
+        "line": _nextLine,
+      };
+
       // Parse test condition
-      ifTree["test"] = boolean1();
+      _getToken();
+      whileTree["test"] = _boolean1();
+
+      if (_nextToken != TokenType.RPAREN) {
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError("Invalid test condition for while loop", errorLine);
+      }
+
+      _getToken();
       if (_nextToken == TokenType.LCURL) {
         // Parse block statements
-        getToken();
-        ifTree["body"] = {
-          "type": "BlockStatement",
-          "body": blockStatements(),
+        _getToken();
+        whileTree["body"] = {
+          "type": TreeNodeTypes.BlockStatement,
+          "body": _blockStatements(),
+          "line": _nextLine,
         };
-        return ifTree;
+        return whileTree;
       } else {
-        print("Enclose block statements inside blocks {}");
-        exit(0);
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError(
+            "Enclose block statements inside curly braces", errorLine);
       }
     } else {
-      print("Pleasse insert the while test condition inside paranthesis");
-      exit(0);
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError("Insert test condition inside paranthesis", errorLine);
     }
   }
 
-  ifStmt() {
+  _ifStmt() {
     /*
     Creates the AST for for statements
     Returns a node for the if statement
      */
     if (_nextToken == TokenType.LPAREN) {
-      Map<String, dynamic> ifTree = {"type": "IfStatement"};
+      Map<String, dynamic> ifTree = {
+        "type": TreeNodeTypes.IfStatement,
+        "line": _nextLine,
+      };
 
+      _getToken();
       // Parse test condition
-      ifTree["test"] = boolean1();
+      ifTree["test"] = _boolean1();
+
+      if (_nextToken != TokenType.RPAREN) {
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError("Invalid test condition for if statement", errorLine);
+      }
+
+      _getToken();
 
       if (_nextToken == TokenType.LCURL) {
         // Parse block statements
-        getToken();
+        _getToken();
         ifTree["consequent"] = {
-          "type": "BlockStatement",
-          "body": blockStatements(),
+          "type": TreeNodeTypes.BlockStatement,
+          "body": _blockStatements(),
+          "line": _nextLine,
         };
         // Parse elseif or else statements
-        ifTree["alternate"] = elseIf() ?? elseStmt();
+        if (_peekNext() == TokenType.ELSE || _peekNext() == TokenType.ELSEIF) {
+          _getToken();
+          ifTree["alternate"] = _elseIf() ?? _elseStmt();
+        }
         return ifTree;
       } else {
-        print("Enclose block statements inside blocks {}");
-        exit(0);
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError(
+            "Enclose block statements inside curly braces", errorLine);
       }
     } else {
-      print("Pleasse insert the if else test condition inside paranthesis");
-      exit(0);
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError("Insert test condition inside paranthesis", errorLine);
     }
   }
 
-  elseIf() {
+  _elseIf() {
     /*
     Parses the elseif statements
      */
     if (_nextToken == TokenType.ELSEIF) {
-      getToken();
-      var elseIfTree = ifStmt();
+      _getToken();
+      var elseIfTree = _ifStmt();
       return elseIfTree;
     }
   }
 
-  elseStmt() {
+  _elseStmt() {
     /*
     Parses the else statement
      */
     if (_nextToken == TokenType.ELSE) {
-      getToken();
+      _getToken();
       if (_nextToken == TokenType.LCURL) {
-        getToken();
-        return {"type": "BlockStatement", "body": blockStatements()};
+        _getToken();
+        return {
+          "type": TreeNodeTypes.BlockStatement,
+          "body": _blockStatements(),
+          "line": _nextLine,
+        };
       } else {
-        print("Enclose block statements inside blocks {}");
-        exit(0);
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError(
+            "Enclose block statements inside blocks curly braces", errorLine);
       }
     }
   }
 
-  blockStatements() {
+  _blockStatements() {
     /*
     Parses the block statements {}
     Returns a list of nodes for the statement types
      */
     var body = [];
     while (_nextToken != TokenType.EOF && _nextToken != TokenType.RCURL) {
-      body.add(stmt());
-      getToken();
+      body.add(_stmt());
+      _getToken();
     }
+
     if (_nextToken == TokenType.EOF) {
-      print("Terminate gar na yar block lai } lekhera");
-      exit(0);
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError("Unterminated block", errorLine);
     }
-    getToken();
     return body;
   }
 
-  checkSemiColon(Map<String, dynamic> result) {
+  _checkSemiColon(Map<String, dynamic> result) {
     /*
     Checks if the statemnt ends with a semicolon or not
     Returns the statement node if it does else logs error and exits the program
      */
+
     if (_nextToken == TokenType.SEMI_COLON) {
       return result;
     } else {
-      print("Invalid token semi colon le matra end hunxa");
-      exit(0);
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError("Statements must end with semicolon ;", errorLine);
     }
   }
 
-  varDecl() {
+  _varDecl() {
     /*
     Creates AST for varibale declaration statements
     Returns a node for the variable decleration type
      */
-    getToken();
+    _getToken();
+
+    var value;
     if (_nextToken != TokenType.IDENTIFIER) {
-      print("INvalid syntax for varibale decl");
-      exit(0);
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError("Invalid syntax for varibale decleration", errorLine);
     }
     Map<String, dynamic>? tree = {
       "type": TreeNodeTypes.VariableDeclaration,
       "id": _nextLexeme,
+      "line": _nextLine,
     };
-    getToken();
+    _getToken();
     if (_nextToken != TokenType.EQUAL) {
-      print("INvalid syntax for varibale decl");
-      exit(0);
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError("Invalid syntax for variable declaration", errorLine);
     }
-    getToken();
-    // Parse the initialization statement
+    _getToken();
+    // Parse the initialization value
     if (_nextToken == TokenType.NULL) {
-      tree["init"] = {"type": "Null", "value": "null"};
-      getToken();
+      value = {
+        "type": TreeNodeTypes.Null,
+        "value": null,
+        "line": _nextLine,
+      };
+      tree["init"] = value;
+
+      _getToken();
     } else {
-      tree["init"] = boolean1();
+      value = _boolean1();
+      tree["init"] = value;
     }
     return tree;
   }
 
-  assignment() {
+  _assignment() {
     /*
     Parses the assignment statements
     Returns a node for the assignemnt type
      */
     var lexeme = _nextLexeme;
-    getToken();
+    _getToken();
     Map<String, dynamic>? left = {
       "type": TreeNodeTypes.Identifier,
       "value": lexeme,
+      "line": _nextLine,
     };
     if (_nextLexeme == "=") {
       var operator = _nextLexeme!;
-      getToken();
-      // Parse the update statement for the identifier
-      var right = boolean1();
+      _getToken();
+      // Parse the update value for the identifier
+      var right = _boolean1();
 
       left = {
         "type": TreeNodeTypes.Assignment,
         "left": left,
         "right": right,
         "operator": operator,
+        "line": _nextLine,
       };
+    } else {
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      print(_currIndex);
+      throw SyntaxError("Invalid syntax for assignment statement", errorLine);
     }
     return left;
   }
 
-  boolean1() {
+  _boolean1() {
     /*
     Parses the boolean OR expressions (Lowest Precedence)
     Returns a node for the expression type
      */
-    var left = boolean2();
+    var left = _boolean2();
     while (_nextLexeme == "or") {
       var operator = _nextLexeme!;
-      getToken();
-      var right = boolean2();
+      _getToken();
+      var right = _boolean2();
 
       left = {
         "type": TreeNodeTypes.LogicalExpression,
         "left": left,
         "right": right,
         "operator": operator,
+        "line": _nextLine,
       };
     }
     return left;
   }
 
-  boolean2() {
+  _boolean2() {
     /*
     Parses the boolean AND expressions
     Returns a node for the expression type
      */
-    var left = relational1();
+    var left = _relational1();
     while (_nextLexeme == "and") {
       var operator = _nextLexeme!;
-      getToken();
-      var right = relational1();
+      _getToken();
+      var right = _relational1();
 
       left = {
         "type": TreeNodeTypes.LogicalExpression,
         "left": left,
         "right": right,
         "operator": operator,
+        "line": _nextLine,
       };
     }
     return left;
   }
 
-  relational1() {
+  _relational1() {
     /*
     Parses the relational == and != expressions
     Returns a node for the expression type
      */
-    var left = relational2();
+    var left = _relational2();
     while (["==", "!="].contains(_nextLexeme)) {
       var operator = _nextLexeme!;
-      getToken();
-      var right = relational2();
+      _getToken();
+      var right = _relational2();
 
       left = {
         "type": TreeNodeTypes.LogicalExpression,
         "left": left,
         "right": right,
         "operator": operator,
+        "line": _nextLine,
       };
     }
     return left;
   }
 
-  relational2() {
+  _relational2() {
     /*
     Parses the relational >, >=, < and <= expressions
     Returns a node for the expression type
      */
-    var left = arithmetic1();
+    var left = _arithmetic1();
     while ([">", ">=", "<", "<="].contains(_nextLexeme)) {
       var operator = _nextLexeme!;
-      getToken();
-      var right = arithmetic1();
+      _getToken();
+      var right = _arithmetic1();
 
       left = {
         "type": TreeNodeTypes.LogicalExpression,
         "left": left,
         "right": right,
         "operator": operator,
+        "line": _nextLine,
       };
     }
     return left;
   }
 
-  arithmetic1() {
+  _arithmetic1() {
     /*
     Parses the arithmetic + and - expressions
     Returns a node for the expression type
      */
-    var left = arithmetic2();
+    var left = _arithmetic2();
     while ("+-".contains(_nextLexeme!)) {
       var operator = _nextLexeme!;
-      getToken();
-      var right = arithmetic2();
+      _getToken();
+      var right = _arithmetic2();
 
       left = {
         "type": TreeNodeTypes.BinaryExpression,
         "left": left,
         "right": right,
         "operator": operator,
+        "line": _nextLine,
       };
     }
     return left;
   }
 
-  arithmetic2() {
+  _arithmetic2() {
     /*
     Parses the *, / and % expressions (Highest Precedence)
     Returns a node for the expression type
      */
-    var left = factor();
+    var left = _factor();
     while ("*/%".contains(_nextLexeme!)) {
       var operator = _nextLexeme!;
-      getToken();
+      _getToken();
 
-      var right = factor();
+      var right = _factor();
 
       left = {
         "type": TreeNodeTypes.BinaryExpression,
         "left": left,
         "right": right,
         "operator": operator,
+        "line": _nextLine,
       };
     }
     return left;
   }
 
-  factor() {
+  _factor() {
     /*
     Parses the identifiers, operators, paranthesis and boolean keywords
     Returns a node for the token type
      */
+
     switch (_nextToken) {
       case TokenType.IDENTIFIER:
         var lexeme = _nextLexeme;
-        getToken();
-        return {"type": TreeNodeTypes.Identifier, "value": lexeme};
+        _getToken();
+        return {
+          "type": TreeNodeTypes.Identifier,
+          "value": lexeme,
+          "line": _nextLine,
+        };
       case TokenType.MINUS:
-        getToken();
-        var result = factor();
+        _getToken();
+        var result = _factor();
         return {
           "type": TreeNodeTypes.UnaryExpression,
           "prefix": true,
           "right": result,
           "operator": "-",
+          "line": _nextLine,
         };
       case TokenType.PLUS:
-        getToken();
-        var result = factor();
-        // getToken();
+        _getToken();
+        var result = _factor();
         return {
           "type": TreeNodeTypes.UnaryExpression,
           "prefix": true,
           "right": result,
           "operator": "+",
+          "line": _nextLine,
         };
       case TokenType.NOT:
-        getToken();
-        var result = factor();
+        _getToken();
+        var result = _factor();
         return {
           "type": TreeNodeTypes.UnaryExpression,
           "prefix": true,
           "right": result,
           "operator": "!",
+          "line": _nextLine,
         };
       case TokenType.STRING:
         var lexeme = _nextLexeme;
-        getToken();
-        return {"type": TreeNodeTypes.String, "value": lexeme};
+        _getToken();
+        return {
+          "type": TreeNodeTypes.String,
+          "value": lexeme,
+          "line": _nextLine,
+        };
       case TokenType.NUMBER:
         var lexeme = _nextLexeme;
-        getToken();
-        return {"type": TreeNodeTypes.Number, "value": double.parse(lexeme!)};
+        _getToken();
+        return {
+          "type": TreeNodeTypes.Number,
+          "value": double.parse(lexeme!),
+          "line": _nextLine,
+        };
       case TokenType.LPAREN:
-        getToken();
-        var intTree = boolean1();
+        _getToken();
+        var intTree = _boolean1();
         if (_nextToken == TokenType.RPAREN) {
-          getToken();
+          _getToken();
           return intTree;
         }
-        print('ERORORORORORORORORRORO Closing paranthesis khai vai?');
-        exit(0);
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError("No closing paranthesis ) to match (", errorLine);
       case TokenType.True:
-        getToken();
-        return {"type": TreeNodeTypes.Boolean, "value": "true"};
+        _getToken();
+        return {
+          "type": TreeNodeTypes.Boolean,
+          "value": true,
+          "line": _nextLine,
+        };
       case TokenType.False:
-        getToken();
-        return {"type": TreeNodeTypes.Boolean, "value": "false"};
+        _getToken();
+        return {
+          "type": TreeNodeTypes.Boolean,
+          "value": false,
+          "line": _nextLine,
+        };
+      case TokenType.NULL:
+        _getToken();
+        return {
+          "type": TreeNodeTypes.Null,
+          "value": null,
+          "line": _nextLine,
+        };
       default:
-        //TODO: Error
-        print("ERROROROROOR Yellai ta chinina ta maile");
-        exit(0);
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError("Invalid token ${_nextLexeme}", errorLine);
     }
   }
 }

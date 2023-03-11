@@ -1,1 +1,16 @@
-for(x; x < 8; x = x+3){}
+var x = 1;
+var y = 1;
+# gahahah
+while(x < 6) {
+    #-
+    ahahha
+    ahahha
+    -#
+   if(x == 4) {
+    y = y * y;
+   }
+   y = y * x;
+   for(var c = 1; c < 6; c=c+7) {}
+   x = x + 1;
+}
+print(y);

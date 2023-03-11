@@ -67,13 +67,23 @@ enum TreeNodeTypes {
   Number,
   Identifier,
   Boolean,
+  Null,
   Program,
   BinaryExpression,
   VariableDeclaration,
   Assignment,
+  BlockStatement,
   UnaryExpression,
   LogicalExpression,
   IfStatement,
   ForStatement,
   WhileStatement,
+  PrintStatement,
+}
+
+enum RunTimeTypes {
+  Null,
+  Number,
+  Boolean,
+  String,
 }
