@@ -32,6 +32,13 @@ class Scanner {
     _nextChar = _handlePos < _code.length ? _code[_handlePos] : null;
   }
 
+  _peekNext() {
+    /*
+    Returns the next character to be used without updating _nextChar  
+    */
+    return _handlePos + 1 < _code.length ? _code[_handlePos + 1] : null;
+  }
+
   lexer() {
     /*
     Lexical analyzer
@@ -87,6 +94,27 @@ class Scanner {
         "lexeme": _lexeme,
         "line": _line,
       });
+    } else if (_nextChar == ",") {
+      _tokens.add({
+        "token": TokenType.COMMA,
+        "lexeme": ",",
+        "line": _line,
+      });
+      _getChar();
+    } else if (_nextChar == "[") {
+      _tokens.add({
+        "token": TokenType.LBRACKET,
+        "lexeme": "[",
+        "line": _line,
+      });
+      _getChar();
+    } else if (_nextChar == "]") {
+      _tokens.add({
+        "token": TokenType.RBRACKET,
+        "lexeme": "]",
+        "line": _line,
+      });
+      _getChar();
     } else if (_nextChar == " " ||
         _nextChar == "\t" ||
         _nextChar == "\n" ||
@@ -256,14 +284,14 @@ class Scanner {
         if (_nextChar == "-") {
           // If multiline comment skip multiple lines until -#
           String? prev = "#";
-          while (prev! + _nextChar! != "-#") {
+          while (_nextChar != null && prev! + _nextChar! != "-#") {
             prev = _nextChar;
             if (_nextChar == "\n") _line++;
             _getChar();
           }
         } else {
           // If one line comment skip the line
-          while (_nextChar != "\n") {
+          while (_nextChar != null && _nextChar != "\n") {
             _getChar();
           }
           _line++;
@@ -283,17 +311,57 @@ class Scanner {
     /*
     Determines the string values in the input
     */
-    _updateLexeme();
     _getChar();
     while (_nextChar != null && _nextChar != '"') {
       _updateLexeme();
       _getChar();
+      if (_nextChar == "\\") {
+        switch (_peekNext()) {
+          case "n":
+            _lexeme += "\n";
+            _getChar();
+            _getChar();
+            break;
+          case "\\":
+            _lexeme += "\\";
+            _getChar();
+            _getChar();
+            break;
+          case "'":
+            _lexeme += "'";
+            _getChar();
+            _getChar();
+            break;
+          case "\"":
+            _lexeme += "\"";
+            _getChar();
+            _getChar();
+            break;
+          case "t":
+            _lexeme += "\t";
+            _getChar();
+            _getChar();
+            break;
+          case "v":
+            _lexeme += "\v";
+            _getChar();
+            _getChar();
+            break;
+          case "r":
+            _lexeme += "\r";
+            _getChar();
+            _getChar();
+            break;
+          default:
+            _getChar();
+            break;
+        }
+      }
     }
 
     if (_nextChar == null) {
       throw UnterminatedStringError("Terminate gar na yar string lai", _line);
     } else {
-      _updateLexeme();
       _getChar();
     }
   }
@@ -305,6 +373,10 @@ class Scanner {
     while (_nextChar != null && _isalphanumeric()) {
       _updateLexeme();
       _getChar();
+      if (_nextChar == "_") {
+        _lexeme += "_";
+        _getChar();
+      }
     }
   }
 

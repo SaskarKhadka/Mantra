@@ -5,6 +5,11 @@ import 'scanner.dart';
 import 'error.dart';
 
 void main() async {
+  // String a = "amama\naaa";
+  // String b = "";
+  // for (int i = 0; i < a.length; i++) {
+  //   print(a[i]);
+  // }
   try {
     String file = await File("main.mnt").readAsString();
     var scanner = Scanner(file);
@@ -29,5 +34,9 @@ void main() async {
     printError(ex.asString);
   } on MultipleDeclarationError catch (ex) {
     printError(ex.asString);
+  } on RunTimeError catch (ex) {
+    printError(ex.asString);
+  } on StackOverflowError catch (ex) {
+    printError(ex.toString());
   }
 }

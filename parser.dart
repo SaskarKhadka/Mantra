@@ -112,6 +112,199 @@ class Parser {
       return _checkSemiColon(_breakStmt());
     } else if (_nextToken == TokenType.CONTINUE) {
       return _checkSemiColon(_continueStatement());
+    } else if (_nextToken == TokenType.RETURN) {
+      return _checkSemiColon(_returnStatement());
+    } else if (_nextToken == TokenType.FUNC) {
+      _getToken();
+      var result = _functionDeclerationStatement();
+      return result;
+    } else if (_nextToken == TokenType.CALL) {
+      _getToken();
+      return _checkSemiColon(_functionCallStatement());
+    } else {
+      throw SyntaxError("Invalid statement type", _nextLine!);
+    }
+  }
+
+  _list() {
+    Map<String, dynamic> listTree = {
+      "type": TreeNodeTypes.List,
+      "line": _nextLine,
+    };
+    List<dynamic> elements = [];
+    while (_nextToken != TokenType.EOF && _nextToken != TokenType.RBRACKET) {
+      elements.add(_boolean1());
+      if (_nextToken == TokenType.COMMA) _getToken();
+    }
+    if (_nextToken == TokenType.EOF) {
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError("No closing bracket ] to match [", errorLine);
+    }
+    _getToken();
+    listTree["value"] = elements;
+    return listTree;
+  }
+
+  _functionCallArguments() {
+    List<Map<String, dynamic>> args = [];
+
+    while (_nextToken != TokenType.RPAREN && _nextToken != TokenType.EOF) {
+      args.add(_boolean1());
+      if (_nextToken == TokenType.COMMA) _getToken();
+
+      if (args.length > 64) {
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw MaxParametersExceeded(
+            "There can only be a maximum of 64 parameters in a function",
+            errorLine);
+      }
+    }
+    if (_nextToken == TokenType.EOF) {
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError(
+          "Arguments in a function call must be enclosed inside paranthesis",
+          errorLine);
+    }
+    return args;
+  }
+
+  _functionCallStatement() {
+    Map<String, dynamic> funcCallTree = {
+      "type": TreeNodeTypes.FunctionCall,
+      "line": _nextLine,
+    };
+    if (_nextToken == TokenType.IDENTIFIER) {
+      funcCallTree["function"] = _nextLexeme;
+      _getToken();
+      if (_nextToken == TokenType.LPAREN) {
+        _getToken();
+        funcCallTree["args"] = _functionCallArguments();
+        _getToken();
+        return funcCallTree;
+      } else {
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError("Invalid function call statement", errorLine);
+      }
+    } else {
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError("Invalid function call statement", errorLine);
+    }
+  }
+
+  _functionParams() {
+    List<Map<String, dynamic>> params = [];
+    int defaultParamsCount = 0;
+    bool defaultParamFound = false;
+    while (true) {
+      if (_nextToken == TokenType.IDENTIFIER) {
+        if (_peekNext() == TokenType.EQUAL) {
+          var result = _assignment();
+          result["default"] = true;
+          params.add(result);
+          defaultParamsCount++;
+          defaultParamFound = true;
+        } else {
+          if (defaultParamFound) {
+            int errorLine =
+                _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+            throw SyntaxError(
+                "All parameters after a default parameter must also be a default parameter",
+                errorLine);
+          }
+          var result = _factor();
+          result["default"] = false;
+          params.add(result);
+        }
+        if (params.length > 64) {
+          int errorLine =
+              _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+          throw MaxParametersExceeded(
+              "There can only be a maximum of 64 parameters in a function",
+              errorLine);
+        }
+        if (_nextToken == TokenType.RPAREN) {
+          return {
+            "params": params,
+            "defaultParamsCount": defaultParamsCount,
+          };
+        } else if (_nextToken == TokenType.COMMA) {
+          if (_peekNext() == TokenType.RPAREN) {
+            _getToken();
+            return {
+              "params": params,
+              "defaultParamsCount": defaultParamsCount,
+            };
+          }
+          _getToken();
+        } else {
+          int errorLine =
+              _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+          throw SyntaxError(
+              "Paramters must be enclosed inside paranthesis and seperated by comma",
+              errorLine);
+        }
+      } else if (_nextToken == TokenType.RPAREN) {
+        return {
+          "params": params,
+          "defaultParamsCount": defaultParamsCount,
+        };
+      } else {
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError("Invalid parameter decleration", errorLine);
+      }
+    }
+  }
+
+  _functionDeclerationStatement() {
+    if (_nextToken == TokenType.IDENTIFIER) {
+      if (keywords[_nextLexeme] != null) {
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError(
+            "'${_nextLexeme}' can't be used as an identifier because it's a keyword",
+            errorLine);
+      }
+      Map<String, dynamic> funcDeclTree = {
+        "type": TreeNodeTypes.FunctionDecleration,
+        "line": _nextLine,
+        "name": _nextLexeme,
+      };
+      _getToken();
+      if (_nextToken == TokenType.LPAREN) {
+        _getToken();
+        // Parse parameters
+        var result = _functionParams();
+        funcDeclTree["params"] = result["params"];
+        funcDeclTree["defaultParamsCount"] = result["defaultParamsCount"];
+
+        _getToken();
+        if (_nextToken == TokenType.LCURL) {
+          // Parse block statements
+          _getToken();
+          funcDeclTree["body"] = {
+            "type": TreeNodeTypes.BlockStatement,
+            "body": _blockStatements(),
+            "line": _nextLine,
+          };
+          return funcDeclTree;
+        } else {
+          int errorLine =
+              _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+          throw SyntaxError(
+              "Enclose block statements inside curly braces", errorLine);
+        }
+      }
+    } else {
+      var message = "Please insert a valid function name";
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError(message, errorLine);
     }
   }
 
@@ -126,7 +319,8 @@ class Parser {
         "line": _nextLine,
       };
     } else {
-      int errorLine = _nextLine!;
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
       throw SyntaxError(
           "A break statement can't be used outside of a loop", errorLine);
     }
@@ -143,9 +337,29 @@ class Parser {
         "line": _nextLine,
       };
     } else {
-      int errorLine = _nextLine!;
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
       throw SyntaxError(
           "A continue statement can't be used outside of a loop", errorLine);
+    }
+  }
+
+  _returnStatement() {
+    /*
+    Parses return statement
+     */
+    if (_nextStatement == TokenType.FUNC) {
+      _getToken();
+      return {
+        "type": TreeNodeTypes.ReturnStatment,
+        "line": _nextLine,
+        "value": _boolean1(),
+      };
+    } else {
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError(
+          "A retrurn statement can't be used outside of a function", errorLine);
     }
   }
 
@@ -158,7 +372,6 @@ class Parser {
         "type": TreeNodeTypes.PrintStatement,
         "line": _nextLine,
       };
-
       printTree["value"] = _boolean1();
       return printTree;
     }
@@ -437,6 +650,13 @@ class Parser {
     _getToken();
 
     var value;
+    if (keywords[_nextLexeme] != null) {
+      int errorLine =
+          _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      throw SyntaxError(
+          "'${_nextLexeme}' can't be used as an identifier because it's a keyword",
+          errorLine);
+    }
     if (_nextToken != TokenType.IDENTIFIER) {
       int errorLine =
           _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
@@ -477,12 +697,30 @@ class Parser {
     Returns a node for the assignemnt type
      */
     var lexeme = _nextLexeme;
-    _getToken();
-    Map<String, dynamic>? left = {
-      "type": TreeNodeTypes.Identifier,
-      "value": lexeme,
-      "line": _nextLine,
-    };
+    Map<String, dynamic>? left = {};
+    if (_peekNext() == TokenType.LBRACKET) {
+      _getToken();
+      _getToken();
+      left = {
+        "type": TreeNodeTypes.MemeberAccessExpression,
+        "value": lexeme,
+        "line": _nextLine,
+        "index": _boolean1(),
+      };
+      if (_nextToken != TokenType.RBRACKET) {
+        int errorLine =
+            _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+        throw SyntaxError("Invalid memeber access expression", errorLine);
+      }
+      _getToken();
+    } else {
+      _getToken();
+      left = {
+        "type": TreeNodeTypes.Identifier,
+        "value": lexeme,
+        "line": _nextLine,
+      };
+    }
     if (_nextLexeme == "=") {
       var operator = _nextLexeme!;
       _getToken();
@@ -499,7 +737,6 @@ class Parser {
     } else {
       int errorLine =
           _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
-      print(_currIndex);
       throw SyntaxError("Invalid syntax for assignment statement", errorLine);
     }
     return left;
@@ -647,12 +884,40 @@ class Parser {
     switch (_nextToken) {
       case TokenType.IDENTIFIER:
         var lexeme = _nextLexeme;
+        if (_peekNext() == TokenType.LBRACKET) {
+          _getToken();
+          _getToken();
+          Map<String, dynamic> result = {
+            "type": TreeNodeTypes.MemeberAccessExpression,
+            "value": lexeme,
+            "index": _boolean1(),
+            "line": _nextLine,
+          };
+          if (_nextToken != TokenType.RBRACKET) {
+            int errorLine =
+                _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+            throw SyntaxError("Invalid memeber access expression", errorLine);
+          }
+          _getToken();
+          return result;
+        }
         _getToken();
         return {
           "type": TreeNodeTypes.Identifier,
           "value": lexeme,
           "line": _nextLine,
         };
+      // case TokenType.COMMA:
+      //   if (_nextStatement != TokenType.CALL) {
+      //     int errorLine =
+      //         _nextLine == _prevLineNumber() ? _nextLine : _prevLineNumber();
+      //     throw SyntaxError("Invalid token ${_nextLexeme}", errorLine);
+      //   }
+      //   _getToken();
+      //   break;
+      case TokenType.CALL:
+        _getToken();
+        return _functionCallStatement();
       case TokenType.MINUS:
         _getToken();
         var result = _factor();
@@ -663,6 +928,9 @@ class Parser {
           "operator": "-",
           "line": _nextLine,
         };
+      case TokenType.LBRACKET:
+        _getToken();
+        return _list();
       case TokenType.PLUS:
         _getToken();
         var result = _factor();
@@ -697,6 +965,14 @@ class Parser {
         return {
           "type": TreeNodeTypes.Number,
           "value": double.parse(lexeme!),
+          "line": _nextLine,
+        };
+      case TokenType.STRING:
+        var lexeme = _nextLexeme;
+        _getToken();
+        return {
+          "type": TreeNodeTypes.String,
+          "value": lexeme!.toString(),
           "line": _nextLine,
         };
       case TokenType.LPAREN:

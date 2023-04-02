@@ -43,8 +43,33 @@ class Interpreter {
         right["type"] == RunTimeTypes.Number) {
       return _evaluateArithmeticExpression(left, right, tree["operator"]);
     }
+
+    if (left["type"] == RunTimeTypes.String &&
+        right["type"] == RunTimeTypes.String &&
+        tree["operator"] == "+") {
+      return _evaluateStringConcatenation(left, right, tree["operator"]);
+    }
+
+    if (left["type"] == RunTimeTypes.List &&
+        right["type"] == RunTimeTypes.List &&
+        tree["operator"] == "+") {
+      return _evaluateListConcatenation(left, right, tree["operator"]);
+    }
     throw TypeError(
         "Icompatible types for operator '${tree['operator']}'", _currLine);
+  }
+
+  _evaluateStringConcatenation(
+      Map<String, dynamic> left, Map<String, dynamic> right, String operator) {
+    return {
+      "type": RunTimeTypes.String,
+      "value": left["value"] + right["value"]
+    };
+  }
+
+  _evaluateListConcatenation(
+      Map<String, dynamic> left, Map<String, dynamic> right, String operator) {
+    return {"type": RunTimeTypes.List, "value": left["value"] + right["value"]};
   }
 
   _evaluateArithmeticExpression(
@@ -231,12 +256,31 @@ class Interpreter {
     Evaluates assignments statements
     Returns the value of the identifier and it's type
      */
+    if (tree["left"]["type"] == TreeNodeTypes.Identifier) {
+      var variable = tree["left"]["value"];
+      Map<String, dynamic> value = _evaluateStatement(tree["right"]);
 
-    var variable = tree["left"]["value"];
-    Map<String, dynamic> value = _evaluateStatement(tree["right"]);
-
-    _symbolTable.setAttribute(variable, value, _currLine);
-    return value;
+      _symbolTable.setAttribute(variable, value, _currLine);
+      return value;
+    } else if (tree["left"]["type"] == TreeNodeTypes.MemeberAccessExpression) {
+      var list = _symbolTable.lookup(tree["left"]["value"], _currLine);
+      var indexResult = _evaluateStatement(tree["left"]["index"]);
+      if (indexResult["type"] != RunTimeTypes.Number ||
+          indexResult["value"] < 0 ||
+          indexResult["value"].floor() != indexResult["value"]) {
+        throw TypeError("Invalid value for list index", _currLine);
+      }
+      if (indexResult["value"] < list["value"].length) {
+        // print(list["value"][indexResult["value"].toInt()]);
+        Map<String, dynamic> value = _evaluateStatement(tree["right"]);
+        list["value"][indexResult["value"].toInt()] = value;
+        _symbolTable.setAttribute(tree["left"]["value"], list, _currLine);
+        return;
+      } else {
+        throw RangeError(
+            "Invalid index value for list ${tree["value"]} ", _currLine);
+      }
+    } else {}
   }
 
   _evaluateInitStatement(Map<String, dynamic> tree) {
@@ -286,6 +330,7 @@ class Interpreter {
     while (result["value"]) {
       var blockResult = _evaluateBlockStatements(tree["body"]["body"]);
       if (blockResult["break"] ?? false) break;
+      if (blockResult["return"] ?? false) return result;
       _evaluateUpdateStatement(tree["update"]);
       result = _evaluateTestCondition(tree["test"]);
 
@@ -312,6 +357,9 @@ class Interpreter {
       }
       if (result["continue"] ?? false) {
         return {"continue": true};
+      }
+      if (result["return"] ?? false) {
+        return result;
       }
     }
     return result;
@@ -365,6 +413,10 @@ class Interpreter {
         break;
       }
 
+      if (blockResult["return"] ?? false) {
+        return blockResult;
+      }
+
       // if (result["continue"]) continue; no need to check
 
       result = _evaluateTestCondition(tree["test"]);
@@ -376,8 +428,31 @@ class Interpreter {
     /*
     Evaluates print statements
      */
-
-    print(_evaluateStatement(tree["value"])["value"]);
+    var result = _evaluateStatement(tree["value"]);
+    switch (result["type"]) {
+      case RunTimeTypes.List:
+        List clean = [];
+        for (int i = 0; i < result["value"].length; i++) {
+          clean.add(result["value"][i]["value"]);
+        }
+        print(clean);
+        break;
+      case RunTimeTypes.Boolean:
+        print(result["value"]);
+        break;
+      case RunTimeTypes.Number:
+        print(result["value"]);
+        break;
+      case RunTimeTypes.String:
+        print(result["value"]);
+        break;
+      case RunTimeTypes.Null:
+        print(result["value"]);
+        break;
+      case RunTimeTypes.Function:
+        print("<function>");
+        break;
+    }
   }
 
   _evaluateBreakStatement(Map<String, dynamic> tree) {
@@ -390,10 +465,109 @@ class Interpreter {
 
   _evaluateContinueStatement(Map<String, dynamic> tree) {
     /*
-    Evaluates continue statements statements
+    Evaluates continue statements
      */
 
     return {"continue": true};
+  }
+
+  _evaluateReturnStatement(Map<String, dynamic> tree) {
+    /*
+    Evaluates return statements
+     */
+
+    return {
+      "return": true,
+      "value": _evaluateStatement(tree["value"]),
+    };
+  }
+
+  _evaluateFunctionDecleration(Map<String, dynamic> tree) {
+    /*
+    Evaluates function deleration statements
+     */
+    var funcName = tree["name"];
+    Map<String, dynamic> value = {
+      "params": tree["params"],
+      "body": tree["body"],
+      "defaultParamsCount": tree["defaultParamsCount"],
+      "name": funcName,
+      "line": tree["line"],
+    };
+    _symbolTable.insert(funcName, value, _currLine);
+    // print(_symbolTable.lookup(funcName, _currLine));
+    return value;
+  }
+
+  _evlauteFunctionCallStatement(Map<String, dynamic> tree) {
+    var functionProperties = _symbolTable.lookup(tree["function"], _currLine);
+
+    List<Map<String, dynamic>> evaluatedArgs = [];
+    // print(functionProperties);
+
+    for (int i = 0; i < tree["args"].length; i++) {
+      evaluatedArgs.add(_evaluateStatement(tree["args"][i]));
+    }
+
+    if (tree["args"].length > functionProperties["params"].length) {
+      throw RunTimeError(
+          "Too many arguments to function ${tree["function"]}", _currLine);
+    } else if (tree["args"].length <
+        (functionProperties["params"].length -
+            functionProperties["defaultParamsCount"])) {
+      throw RunTimeError(
+          "Too few arguments to function ${tree["function"]}", _currLine);
+    } else {
+      _symbolTable.allocate();
+      _symbolTable.insert(
+          functionProperties["name"], functionProperties, _currLine);
+      for (int i = 0; i < functionProperties["params"].length; i++) {
+        if (tree["args"].length > i) {
+          _symbolTable.insert(
+              functionProperties["params"][i]["value"] ??
+                  functionProperties["params"][i]["left"]["value"],
+              evaluatedArgs[i],
+              functionProperties["line"]);
+        } else {
+          _symbolTable.insert(
+              functionProperties["params"][i]["left"]["value"],
+              _evaluateStatement(functionProperties["params"][i]["right"]),
+              functionProperties["line"]);
+        }
+      }
+      var blockResult =
+          _evaluateBlockStatements(functionProperties["body"]["body"]);
+      if (blockResult["return"] ?? false) {
+        return blockResult["value"];
+      } else {
+        return {"type": RunTimeTypes.Null, "value": null};
+      }
+    }
+  }
+
+  _evaluateList(Map<String, dynamic> tree) {
+    List<dynamic> evaluatedList = [];
+    for (int i = 0; i < tree["value"].length; i++) {
+      evaluatedList.add(_evaluateStatement(tree["value"][i]));
+    }
+    return {"type": RunTimeTypes.List, "value": evaluatedList};
+  }
+
+  _evaluateMemeberAccessExpression(Map<String, dynamic> tree) {
+    var list = (_symbolTable.lookup(tree["value"], _currLine));
+    var indexResult = _evaluateStatement(tree["index"]);
+    if (indexResult["type"] != RunTimeTypes.Number ||
+        indexResult["value"] < 0 ||
+        indexResult["value"].floor() != indexResult["value"]) {
+      throw TypeError("Invalid value for list index", _currLine);
+    }
+    if (indexResult["value"] < list["value"].length) {
+      // print(list["value"][indexResult["value"].toInt()]);
+      return list["value"][indexResult["value"].toInt()];
+    } else {
+      throw RangeError(
+          "Invalid index value for list ${tree["value"]} ", _currLine);
+    }
   }
 
   _evaluateStatement(Map<String, dynamic> statement) {
@@ -402,6 +576,12 @@ class Interpreter {
      */
     _currLine = statement["line"];
     switch (statement["type"]) {
+      case TreeNodeTypes.FunctionCall:
+        return _evlauteFunctionCallStatement(statement);
+      case TreeNodeTypes.ReturnStatment:
+        return _evaluateReturnStatement(statement);
+      case TreeNodeTypes.FunctionDecleration:
+        return _evaluateFunctionDecleration(statement);
       case TreeNodeTypes.BreakStatement:
         return _evaluateBreakStatement(statement);
       case TreeNodeTypes.ContinueStatement:
@@ -412,13 +592,11 @@ class Interpreter {
         _evaluateAssignment(statement);
         break;
       case TreeNodeTypes.ForStatement:
-        _evaluateForStatement(statement);
-        break;
+        return _evaluateForStatement(statement);
       case TreeNodeTypes.IfStatement:
         return _evaluateIfStatement(statement);
       case TreeNodeTypes.WhileStatement:
-        _evaluateWhileStatement(statement);
-        break;
+        return _evaluateWhileStatement(statement);
       case TreeNodeTypes.PrintStatement:
         _evaluatePrintStatement(statement);
         break;
@@ -428,12 +606,20 @@ class Interpreter {
         return _evaluateLogicalExpression(statement);
       case TreeNodeTypes.UnaryExpression:
         return _evaluateUnaryExpression(statement);
+      case TreeNodeTypes.MemeberAccessExpression:
+        return _evaluateMemeberAccessExpression(statement);
       case TreeNodeTypes.Identifier:
         return _evaluateIdentifier(statement);
+      case TreeNodeTypes.List:
+        return _evaluateList(statement);
+      case TreeNodeTypes.Null:
+        return {"type": RunTimeTypes.Null, "value": null};
       case TreeNodeTypes.Number:
         return {"type": RunTimeTypes.Number, "value": statement["value"]};
       case TreeNodeTypes.Boolean:
         return {"type": RunTimeTypes.Boolean, "value": statement["value"]};
+      case TreeNodeTypes.String:
+        return {"type": RunTimeTypes.String, "value": statement["value"]};
       default:
         break;
     }

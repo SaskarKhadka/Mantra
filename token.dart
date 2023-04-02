@@ -10,6 +10,9 @@ enum TokenType {
   SEMI_COLON,
   LCURL,
   RCURL,
+  COMMA,
+  LBRACKET,
+  RBRACKET,
 
   EQUAL,
   EQUALEQUAL,
@@ -36,6 +39,8 @@ enum TokenType {
   AND,
   BREAK,
   CONTINUE,
+  RETURN,
+  CALL,
 
   // LITERALS
   STRING,
@@ -61,6 +66,8 @@ final Map<String, dynamic> keywords = {
   "and": TokenType.AND,
   "break": TokenType.BREAK,
   "continue": TokenType.CONTINUE,
+  "return": TokenType.RETURN,
+  "call": TokenType.CALL,
 };
 
 enum TreeNodeTypes {
@@ -84,7 +91,12 @@ enum TreeNodeTypes {
   WhileStatement,
   PrintStatement,
   BreakStatement,
-  ContinueStatement
+  ContinueStatement,
+  ReturnStatment,
+  FunctionDecleration,
+  FunctionCall,
+  List,
+  MemeberAccessExpression,
 }
 
 enum RunTimeTypes {
@@ -92,4 +104,6 @@ enum RunTimeTypes {
   Number,
   Boolean,
   String,
+  Function,
+  List,
 }

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'error.dart';
 
 class SymbolTableNode {
@@ -78,7 +76,7 @@ class SymbolTable {
     Inserts the variable and its value in the symbol table,
     Returns the value of the variable
      */
-    if (_latestScope.vars["variable"] == null) {
+    if (!_latestScope.vars.containsKey(variable)) {
       _latestScope.vars[variable] = value;
       return _latestScope;
     } else {

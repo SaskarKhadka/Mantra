@@ -12,6 +12,9 @@ enum ErrorType {
   TypeError,
   UndeclaredVariableError,
   MultipleDeclarationError,
+  MaxParametersExceeded,
+  RunTimeError,
+  RangeError,
 }
 
 class Error {
@@ -60,10 +63,25 @@ class TypeError extends Error {
 
 class UndeclaredVariableError extends Error {
   UndeclaredVariableError(String message, int line)
-      : super(ErrorType.TypeError, message, line);
+      : super(ErrorType.UndeclaredVariableError, message, line);
 }
 
 class MultipleDeclarationError extends Error {
   MultipleDeclarationError(String message, int line)
-      : super(ErrorType.TypeError, message, line);
+      : super(ErrorType.MultipleDeclarationError, message, line);
+}
+
+class MaxParametersExceeded extends Error {
+  MaxParametersExceeded(String message, int line)
+      : super(ErrorType.MaxParametersExceeded, message, line);
+}
+
+class RunTimeError extends Error {
+  RunTimeError(String message, int line)
+      : super(ErrorType.RunTimeError, message, line);
+}
+
+class RangeError extends Error {
+  RangeError(String message, int line)
+      : super(ErrorType.RangeError, message, line);
 }
